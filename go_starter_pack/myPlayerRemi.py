@@ -11,7 +11,7 @@ import random
 
 
 class Node:
-    def __init__(self, parent):
+    def __init__(self, parent=None):
         self.parent = parent
         self.is_leaf = True
         self.children = []
@@ -37,6 +37,7 @@ class Node:
         #if self.is_leaf:
 
         pass
+
 
 def chooseRandomMove(board, color):
         moves = list(board._empties)
@@ -102,11 +103,9 @@ class myPlayer(PlayerInterface):
         best_move = moves[0]
         for move in moves:
             value = getValue(self._board, self._mycolor, move) ###
-            print('value for move ' + self._board.move_to_str(move) + ' =', value)
             if value > best_value:
                 best_value = value
                 best_move = move
-            print('best move : ' + self._board.move_to_str(best_move))
 
         self._board.push(best_move)
 
