@@ -8,35 +8,48 @@ from playerInterface import *
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import math
+
+C_PUCT = 1 # facteur d'exploration
 
 
 class Node:
-    def __init__(self, parent=None):
+    def __init__(self, mycolor, parent=None):
         self.parent = parent
         self.is_leaf = True
         self.children = []
         self.p = 0
         self.n = 0
         self.w = 0
+        self.mycolor = mycolor
+        # stocker boards ou moves ?
 
     def q(self):
-        pass
+        if self.n == 0:
+            return 0
+        return self.w / self.n
 
     def u(self):
-        pass
+        n_sum = 0
+        for child in self.children:
+            n_sum += child.n
+
+        return self.p * math.sqrt(n_sum) / (1 + self.n) * C_PUCT
 
     def choose_children(self):
         max_value = 0
+        best_child = None
         for child in self.children:
             child_value = child.q() + child.u()
             if child_value > max_value:
                 max_value = child_value
-        return max_value
+                best_child = child
+        return best_child
 
-    def expand(self): # 1 simulation par fils ; remonter quand tout 1 niveau est simuler
-        #if self.is_leaf:
+    def expand(self): # 1 simulation par fils ; remonter quand tout 1 niveau est simuler ; repartir d'en haut
+        if self.is_leaf:
+            moves = 
 
-        pass
 
 
 def chooseRandomMove(board, color):
@@ -55,29 +68,22 @@ def rollout(board, mycolor):
         #moves = board.legal_moves()
         #random_move = moves[random.randrange(len(moves))] # random.choice ?
         random_move = chooseRandomMove(board, mycolor)
-
         board.push(random_move)
         nb_move_played += 1
-
     # who won ? (we won = 1, we lost = 0)
     result = int(board.final_go_score()[0].lower() == Goban.Board.player_name(mycolor)[0]) #1:win, 0:lose
-    
     for _ in range(nb_move_played):
         board.pop()
-
     return result
 
 simulations = 20
 
 def getValue(board, mycolor, move):
     board.push(move)
-
     total = 0
     for i in range(simulations):
         total += rollout(board, mycolor) #1 si gagne, 0 sinon
-
     board.pop()
-
     return total/simulations
 
 
