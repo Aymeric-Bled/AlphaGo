@@ -52,7 +52,7 @@ def chooseRandomMove(board, color):
 def rollout(board, mycolor):
     nb_move_played = 0
     while not board.is_game_over():
-        moves = board.legal_moves()
+        #moves = board.legal_moves()
         #random_move = moves[random.randrange(len(moves))] # random.choice ?
         random_move = chooseRandomMove(board, mycolor)
 
