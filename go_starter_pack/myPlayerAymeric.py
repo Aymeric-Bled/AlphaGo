@@ -1,171 +1,189 @@
 # -*- coding: utf-8 -*-
-''' This is the famous random player which (almost) always looses.
+''' This is my player which (almost) always win (hopefully).
 '''
 
-from numpy.core.fromnumeric import shape
 import Goban
 from playerInterface import *
 
 import numpy as np
 import matplotlib.pyplot as plt
-
 import random
+import math
+
+C_PUCT = 10 # facteur d'exploration
+
+
+class Node:
+    def __init__(self, mycolor, move, parent=None):
+        self.parent = parent
+        self.is_leaf = True
+        self.children = []
+        self.p = 1
+        self.n = 0
+        self.w = 0
+        self.mycolor = mycolor
+        self.move = move
+        # stocker boards ou moves ?
+
+    def q(self):
+        if self.n == 0:
+            return 0
+        return self.w / self.n
+
+    def u(self):
+        n_sum = 0
+        for child in self.children:
+            n_sum += child.n
+
+        return self.p * math.sqrt(self.n) / (1 + self.n) * C_PUCT
+
+    def choose_children(self):
+        max_value = -1
+        best_children = []
+        for child in self.children:
+            child_value = child.q() + child.u()
+            if child_value > max_value:
+                max_value = child_value
+                best_children = [child]
+            elif child_value == max_value:
+                best_children.append(child)
+        return random.choice(best_children)
+
+    def expand(self, board): # 1 simulation par fils ; remonter quand tout 1 niveau est simuler ; repartir d'en haut
+        if self.is_leaf:
+            if board.is_game_over():
+                node = self
+                result = board.final_go_score()[0]
+                while node != None:
+                    if result == "B" and node.mycolor == board._WHITE or result == "W" and node.mycolor == board._BLACK:
+                        node.w += 1
+                    node.n += 1
+                    node = node.parent
+                return
+            moves = board.legal_moves()
+            if moves != []:
+                self.is_leaf = False
+                for move in moves:
+                    board.push(move)
+                    if self.mycolor == board._BLACK:
+                        newcolor = board._WHITE
+                    else:
+                        newcolor = board._BLACK
+                    node = Node(newcolor, move, self)
+                    self.children.append(node)
+                    result = rollout(board, newcolor)
+                    board.pop()
+                    while node != None:
+                        if result == "B" and node.mycolor == board._WHITE or result == "W" and node.mycolor == board._BLACK:
+                            node.w += 1
+                        node.n += 1
+                        node = node.parent
+        else:
+            children = self.choose_children()
+            board.push(children.move)
+            children.expand(board)
+            board.pop()
+
+
+
+
+def chooseRandomMove(board, color):
+    moves = list(board._empties)
+    moves.append(-1)
+    length = len(moves)
+    while moves != []:
+        i = random.randint(0, length - 1)
+        move = moves[i]
+        del moves[i]
+        length -= 1
+        if move == -1 or not board._is_suicide(move, color) and not board._is_super_ko(move, color)[0]:
+            return move
+    return None
+
+def rollout(board, mycolor):
+    nb_move_played = 0
+    while not board.is_game_over():
+        random_move = chooseRandomMove(board, mycolor)
+        board.push(random_move)
+        nb_move_played += 1
+    # who won ? (we won = 1, we lost = 0)
+    result = board.final_go_score()[0] #1:win, 0:lose
+    for _ in range(nb_move_played):
+        board.pop()
+    return result
+
+simulations = 20
+
+def getValue(board, mycolor, move):
+    board.push(move)
+    total = 0
+    for _ in range(simulations):
+        total += rollout(board, mycolor) #1 si gagne, 0 sinon
+    board.pop()
+    return total/simulations
+
+
 
 class myPlayer(PlayerInterface):
-    ''' Example of a random player for the go. The only tricky part is to be able to handle
-    the internal representation of moves given by legal_moves() and used by push() and
-    to translate them to the GO-move strings "A1", ..., "J8", "PASS". Easy!
-
-    '''
 
     def __init__(self):
         self._board = Goban.Board()
         self._mycolor = None
 
     def getPlayerName(self):
-        return "Random Player"
+        return "My Player"
 
     def getPlayerMove(self):
         if self._board.is_game_over():
             print("Referee told me to play but the game is over!")
             return "PASS"
-        # Get the list of all possible moves
-        moves = self._board.legal_moves() # Dont use weak_legal_moves() here!
+        import time
+        endtime = time.time() + 3
+        end = False
+        while time.time() < endtime:
+            self._root.expand(self._board)
+        max = -1000
+        best_moves = []
+        for node in self._root.children:
+            if node.q() - node.u() > max:
+                best_moves = [node.move]
+                max = node.q() - node.u()
+            elif node.q() - node.u() == max:
+                best_moves.append(node.move)
+        best_move = random.choice(best_moves)
 
-        # Let's plot some board probabilities
-        import go_plot
-        # Generate random proabibilities
-        probabilities = np.zeros(self._board._BOARDSIZE ** 2 + 1)
-        mcts = self.MCTS(20)
-        for i in range(len(mcts)):
-            probabilities[int(mcts[i,0])] = mcts[i,1]
-        # Now we want to to put to 0 all impossible moves
-        # SO we careate multiplier with 0 everywhere and put 1 where the move is legal
-        multiplier = np.zeros_like(probabilities)
-        for some_move in moves:
-            x, y = Goban.Board.unflatten(some_move)
-            if x == y == -1:
-                continue
-            multiplier[y * Goban.Board._BOARDSIZE + x] = 1
-        # Pass move is always legal
-        multiplier[-1] = 1
-        # Now we multiply our probs
-        probabilities *= multiplier
-
-        
-        sum = np.sum(probabilities)
-        if sum == 0:
-            moves = self._board.legal_moves()
-            # Generate random proabibilities
-            probabilities = np.random.uniform(size=self._board._BOARDSIZE ** 2 + 1)
-            # Now we want to to put to 0 all impossible moves
-            # SO we careate multiplier with 0 everywhere and put 1 where the move is legal
-            multiplier = np.zeros_like(probabilities)
-            for some_move in moves:
-                x, y = Goban.Board.unflatten(some_move)
-                if x == y == -1:
-                    continue 
-                multiplier[y * Goban.Board._BOARDSIZE + x] = 1
-            # Pass move is always legal
-            multiplier[-1] = 1
-            # Now we multiply our probs
-            probabilities *= multiplier
-
-        # Normalize them
-        probabilities /= np.sum(probabilities)
-
-        # We plot them
-        #go_plot.plot_play_probabilities(self._board, probabilities)
-
-        
-        print(probabilities)
-        '''
-        bestMoves = [-1]
-        value = probabilities[81]
-        for i in range(81):
-            if probabilities[i] > value:
-                value = probabilities[i]
-                bestMoves = [i]
-            elif probabilities[i] == value:
-                bestMoves.append(i)
-        move = np.random.choice(bestMoves)
-        '''
-        move = np.random.choice(range(self._board._BOARDSIZE ** 2 + 1), p=probabilities)
-        # Correct number for PASS
-        if move == self._board._BOARDSIZE ** 2:
-            move = -1
-        self._board.push(move)
-
-        # New here: allows to consider internal representations of moves
-        #print("I am playing ", self._board.move_to_str(move))
-        #print("My current board :")
-        #self._board.prettyPrint()
-
-        # move is an internal representation. To communicate with the interface I need to change if to a string
-        return Goban.Board.flat_to_name(move)
-
-    def MCTS(self, nbGames):
-        legals = self._board.legal_moves()
-        proba = []
-        for move in legals:
-            proba.append(self.probability(move, nbGames))
-        return np.array(proba)
-
-    def probability(self, move, nbGames):
-        self._board.push(move)
-        victories = 0
-        for i in range(nbGames):
-            if self.rollout():
-                victories += 1
-        self._board.pop()
-        return (move, victories / nbGames)
-
-    def rollout(self):
-        i = 0
-        color = self._mycolor
-        while not self._board._gameOver:
-            move = self.chooseRandomMove(color)
-            self._board.push(move)
-            i += 1
-            if color == self._board._WHITE:
-                color = self._board._BLACK
-            else:
-                color = self._board._WHITE
-        
-        result = self._board.result()
-        
-        test = False
-
-        if result == "1-0" and self._mycolor == self._board._WHITE or result == "0-1" and self._mycolor == self._board._BLACK:
-            test = True
-
-        while i > 0:
-            self._board.pop()
-            i -= 1
-
-        return test
-
-    def chooseRandomMove(self, color):
-        moves = list(self._board._empties)
-        moves.append(-1)
-        while moves != []:
-            move = random.choice(moves)
-            del moves[moves.index(move)]
-            if move == -1 or not self._board._is_suicide(move, color) and not self._board._is_super_ko(move, color)[0]:
-                return move
-        return None
+        self._board.push(best_move)
+        children = self._root.children
+        self._root = Node(self._opponent, best_move)
+        for node in children:
+            if node.move == best_move:
+                self._root = node
+        return Goban.Board.flat_to_name(best_move)
 
     def playOpponentMove(self, move):
         #print("Opponent played ", move, "i.e. ", move) # New here
         # the board needs an internal represetation to push the move.  Not a string
-        self._board.push(Goban.Board.name_to_flat(move))
+        move = Goban.Board.name_to_flat(move)
+        self._board.push(move)
+        children = self._root.children
+        self._root = Node(self._mycolor, move)
+        for node in children:
+            if node.move == move:
+                self._root = node
 
     def newGame(self, color):
         self._mycolor = color
         self._opponent = Goban.Board.flip(color)
+        self._root = Node(Goban.Board._BLACK, None)
 
     def endGame(self, winner):
         if self._mycolor == winner:
             print("I won!!!")
         else:
             print("I lost :(!!")
+
+
+# modifier : 
+#play oponnent move
+#new game
+#get player move
