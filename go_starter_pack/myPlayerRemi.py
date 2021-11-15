@@ -20,7 +20,7 @@ class Node:
         self.move = move
         self.is_leaf = True
         self.children = []
-        self.p = 0 # prior probability (given by neural network every time we hit a leaf node)
+        self.p = 1 # prior probability (given by neural network every time we hit a leaf node)
         self.n = 0 # visit count (inc for each node in the path when perform backup)
         self.w = 0 # winning count (update during backup for each node in the path back to root)
         self.depth = depth # even = ours, odd = opponent
