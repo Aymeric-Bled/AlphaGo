@@ -120,8 +120,6 @@ class MCTS:
 
             node = self.select()
 
-            #if node is terminal (game over), what do we do ? (ask)
-
             # game state of leaf node passed into neural network which ouput predictions (p:move probs, v:value of the state)
             # p is attached to the new feasible actions from the leaf node
 
