@@ -12,10 +12,9 @@ import math
 import time
 
 C_PUCT = 1 # facteur d'exploration
-TAU = 1    # temperature
 
 class Node:
-    def __init__(self, parent=None, move=None, depth=0):
+    def __init__(self, color, parent=None, move=None):
         self.parent = parent
         self.move = move
         self.is_leaf = True
@@ -23,7 +22,7 @@ class Node:
         self.p = 1 # prior probability (given by neural network every time we hit a leaf node)
         self.n = 0 # visit count (inc for each node in the path when perform backup)
         self.w = 0 # winning count (update during backup for each node in the path back to root)
-        self.depth = depth # even = ours, odd = opponent
+        self.color = color
 
     def q(self):
         if self.n == 0:
@@ -51,7 +50,7 @@ class MCTS:
     def __init__(self, board, color):
         self.board = board
         self.mycolor = color
-        self.root = Node()
+        self.root = Node(board._BLACK)
         self.expand(self.root)
 
     def select(self):
@@ -71,14 +70,20 @@ class MCTS:
         else:
             moves = self.board.legal_moves()
             for move in moves:
-                child_node = Node(node, move, node.depth+1)
+                color = None
+                if node.color == self.board._BLACK:
+                    color = self.board._WHITE
+                else:
+                    color = self.board._BLACK
+                child_node = Node(color, node, move)
                 node.children.append(child_node)
             node.is_leaf = False
             return node.children
 
     def backup(self, node, results, rollouts_count):
         while node is not None:
-            if node.depth%2 == 0:
+            #if node.depth%2 == 1:
+            if node.color != self.mycolor:
                 node.w += results
             else:
                 node.w += rollouts_count - results
@@ -87,13 +92,13 @@ class MCTS:
                 self.board.pop() # pop moves that we pushed with select
             node = node.parent
 
-    def chooseRandomMove(self):
+    def chooseRandomMove(self, color):
             moves = list(self.board._empties)
             moves.append(-1)
             while moves != []:
                 move = random.choice(moves)
                 del moves[moves.index(move)]
-                if move == -1 or not self.board._is_suicide(move, self.mycolor) and not self.board._is_super_ko(move, self.mycolor)[0]:
+                if move == -1 or not self.board._is_suicide(move, color) and not self.board._is_super_ko(move, color)[0]:
                     return move
             return None
 
@@ -105,7 +110,7 @@ class MCTS:
         while not self.board.is_game_over():
             #moves = board.legal_moves()
             #random_move = moves[random.randrange(len(moves))]
-            random_move = self.chooseRandomMove()
+            random_move = self.chooseRandomMove(self.board.next_player())
             self.board.push(random_move)
             nb_move_played += 1
         # who won ? (we won = 1, we lost = 0)
@@ -133,10 +138,11 @@ class MCTS:
                     self.board.push(child.move)
                     result = self.rollout()
                     self.board.pop()
-                    if node.depth%2 == 0: # children are opponent's nodes, so store result from his perspective
-                        child.w += 1 - result
-                    else:
+                    #if node.depth%2 == 0: # children are ours nodes, so store result from our perspective
+                    if node.color == self.mycolor:
                         child.w += result
+                    else:
+                        child.w += 1 - result
                     child.n += 1
                     result_sum += result
 
@@ -146,14 +152,18 @@ class MCTS:
                 self.backup(node, result, 1)
 
     def moveToPlay(self):
+        tau = 1    # temperature
+        if self.board._nbBLACK + self.board._nbWHITE >= self.board._BOARDSIZE:
+            tau = 0.1
+
         n_sum = 0
         n_list = []
         for child in self.root.children:
             n_list.append(child.n)
-            n_sum += child.n
-        
+            n_sum += child.n**(1/tau)
+
         for i, n in enumerate(n_list):
-            n_list[i] = n**(1/TAU)/(n_sum**(1/TAU)) # * alpha ?
+            n_list[i] = n**(1/tau)/(n_sum)
         
         # pick move from distribution
         child_index = np.random.choice(range(len(n_list)), p=n_list)
@@ -161,10 +171,14 @@ class MCTS:
 
     def updateTree(self, move):
         # self.board.push(move) # only if mcts has a deepcopy of the board
+        if len(self.root.children) == 0:
+            self.expand(self.root)
+
         new_root = None
         for child in self.root.children:
             if self.board.move_to_str(child.move) == self.board.move_to_str(move):
                 new_root = child
+                break
         self.root = new_root
         self.root.parent = None
 
@@ -199,10 +213,10 @@ class myPlayer(PlayerInterface):
 
         ### Version 2 (MCTS)
         # update mcts root and state (based on opponent move)
-        self._mcts.process(10)
+        self._mcts.process(5)
         move = self._mcts.moveToPlay()
-        self._board.push(move)
         self._mcts.updateTree(move)
+        self._board.push(move)
 
         ### Version 1 (simulations on 1st level)
         # best_value = 0
@@ -242,8 +256,8 @@ class myPlayer(PlayerInterface):
     def playOpponentMove(self, move):
         #print("Opponent played ", move, "i.e. ", move) # New here
         # the board needs an internal represetation to push the move.  Not a string
-        self._board.push(Goban.Board.name_to_flat(move))
         self._mcts.updateTree(Goban.Board.name_to_flat(move))
+        self._board.push(Goban.Board.name_to_flat(move))
 
     def newGame(self, color):
         self._mycolor = color
