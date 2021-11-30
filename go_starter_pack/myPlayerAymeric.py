@@ -11,6 +11,7 @@ import random
 import math
 
 C_PUCT = 10 # facteur d'exploration
+TAU = 0.01   # temperature
 
 
 class Node:
@@ -31,10 +32,6 @@ class Node:
         return self.w / self.n
 
     def u(self):
-        n_sum = 0
-        for child in self.children:
-            n_sum += child.n
-
         return self.p * math.sqrt(self.n) / (1 + self.n) * C_PUCT
 
     def choose_children(self):
@@ -84,6 +81,56 @@ class Node:
             children.expand(board)
             board.pop()
 
+class MCTS:
+    def __init__(self, mycolor) -> None:
+        self._root = Node(mycolor, -1)
+    def updateTree(self, best_move, color):
+        children = self._root.children
+        self._root = None
+        for node in children:
+            if node.move == best_move:
+                self._root = node
+        if self._root == None:
+            self._root = Node(color, best_move)
+        self._root.parent = None
+
+    def process(self, timeout, board):
+        import time
+        endtime = time.time() + timeout
+        while time.time() < endtime:
+            self._root.expand(board)
+
+
+    '''
+    def chooseBestMove(self):
+        max = -1000
+        best_moves = []
+        for node in self._root.children:
+            if node.q() > max:
+                best_moves = [node.move]
+                max = node.q()
+            elif node.q() == max:
+                best_moves.append(node.move)
+        best_move = random.choice(best_moves)
+        return best_move
+    '''
+
+    def chooseBestMove(self, board):
+        tau = 1
+        if len(board._empties) * 10 < 9 * board._BOARDSIZE ** 2:
+            tau = 0.01
+        n_sum = 0
+        n_list = []
+        for child in self._root.children:
+            n_list.append(child.n)
+            n_sum += child.n ** (1 / tau)
+        
+        for i, n in enumerate(n_list):
+            n_list[i] = n**(1/tau)/n_sum # * alpha ?
+        
+        # pick move from distribution
+        child_index = np.random.choice(range(len(n_list)), p=n_list)
+        return self._root.children[child_index].move
 
 
 
@@ -112,16 +159,6 @@ def rollout(board, mycolor):
         board.pop()
     return result
 
-simulations = 20
-
-def getValue(board, mycolor, move):
-    board.push(move)
-    total = 0
-    for _ in range(simulations):
-        total += rollout(board, mycolor) #1 si gagne, 0 sinon
-    board.pop()
-    return total/simulations
-
 
 
 class myPlayer(PlayerInterface):
@@ -137,27 +174,10 @@ class myPlayer(PlayerInterface):
         if self._board.is_game_over():
             print("Referee told me to play but the game is over!")
             return "PASS"
-        import time
-        endtime = time.time() + 3
-        end = False
-        while time.time() < endtime:
-            self._root.expand(self._board)
-        max = -1000
-        best_moves = []
-        for node in self._root.children:
-            if node.q() - node.u() > max:
-                best_moves = [node.move]
-                max = node.q() - node.u()
-            elif node.q() - node.u() == max:
-                best_moves.append(node.move)
-        best_move = random.choice(best_moves)
-
+        self._mcts.process(3, self._board)
+        best_move = self._mcts.chooseBestMove(self._board)
         self._board.push(best_move)
-        children = self._root.children
-        self._root = Node(self._opponent, best_move)
-        for node in children:
-            if node.move == best_move:
-                self._root = node
+        self._mcts.updateTree(best_move, self._opponent)
         return Goban.Board.flat_to_name(best_move)
 
     def playOpponentMove(self, move):
@@ -165,16 +185,12 @@ class myPlayer(PlayerInterface):
         # the board needs an internal represetation to push the move.  Not a string
         move = Goban.Board.name_to_flat(move)
         self._board.push(move)
-        children = self._root.children
-        self._root = Node(self._mycolor, move)
-        for node in children:
-            if node.move == move:
-                self._root = node
+        self._mcts.updateTree(move, self._mycolor)
 
     def newGame(self, color):
         self._mycolor = color
         self._opponent = Goban.Board.flip(color)
-        self._root = Node(Goban.Board._BLACK, None)
+        self._mcts = MCTS(Goban.Board._BLACK)
 
     def endGame(self, winner):
         if self._mycolor == winner:
