@@ -6,6 +6,9 @@ import gzip
 import json
 import os
 import urllib
+import Goban
+import torch.optim as optim
+from Goban import Board
 
 def get_raw_data_go():
     ''' Returns the set of samples from the local file or download it if it does not exists'''
@@ -101,3 +104,83 @@ def coord_to_board(black_moves, white_moves):
     for x,y in white_moves:
         board[x][y] = -1.
     return board
+
+
+def get_data(data):
+    D = []
+    j = 0
+    length = len(data)
+    for game in data:
+        print(j, "/", length)
+        j += 1
+        if game['depth'] < 9:
+            continue
+        board_list = []
+        board = Goban.Board()
+        err = False
+        for m in game['list_of_moves']:
+            if m == 'PASS':
+                move = -1
+            else:
+                (x,y) = name_to_coord(m)
+                move = y * board._BOARDSIZE + x
+            try:
+                board.push(move)
+            except:
+                err = True
+                break
+            
+            board_black = board._board.copy()
+            board_white = board._board.copy()
+            for i in range(board._BOARDSIZE ** 2):
+                if board_black[i] == 2:
+                    board_black[i] = 0
+                if board_white[i] == 1:
+                    board_white[i] = 0
+                if board_white[i] == 2:
+                    board_white[i] = 1 
+            board_list.append(np.array([board_black, board_white]))
+        if err:
+            continue
+        hist = board_list[-9:-1]
+        v = None
+        if (game['depth'] - 1) %2 == 0:
+            hist.append(np.array([np.ones(board._BOARDSIZE ** 2, dtype=np.uint8), np.ones(board._BOARDSIZE ** 2, dtype=np.uint8)])) #BLACK to 1
+            v = int(game['black_wins']) / 100
+        else:
+            hist.append(np.array([np.zeros(board._BOARDSIZE ** 2, dtype=np.uint8), np.zeros(board._BOARDSIZE ** 2, dtype=np.uint8)])) #WHITE to 0
+            v = int(game['white_wins']) / 100
+        hist = np.array(hist) 
+        m = game['list_of_moves'][-1]
+        if m == 'PASS':
+            move = board._BOARDSIZE ** 2
+        else:
+            (x,y) = name_to_coord(m)
+            move = y * board._BOARDSIZE + x
+        p = np.zeros(board._BOARDSIZE ** 2 + 1, dtype=np.uint8)
+        p[move] = 1
+
+        d = torch.reshape(torch.from_numpy(hist), (1,9,2,81)).type(torch.float64)
+        D.append((d,torch.tensor(p, dtype=torch.float64),torch.tensor(v)))
+    return D
+
+def train():
+    model = NeuralNetwork()
+    criterion = nn.L1Loss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    for step in range(1000):
+        print(step)
+        for (d, p, v) in range(D):
+            optimizer.zero_grad()
+            p_model, v_model = model(d.clone().detach().requires_grad_(True))
+            loss = criterion(p_model, p.to(torch.int64))
+            loss /= (Board._BOARDSIZE ** 2 + 1)
+            loss += torch.abs(v - v_model)
+            print(loss)
+        
+            
+
+#D = get_data(data)
+
+#print(data[0].keys())
+

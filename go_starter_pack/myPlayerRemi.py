@@ -18,9 +18,9 @@ C_PUCT = 1 # facteur d'exploration
 
 use_nn = True # Set it to False to use only MCTS
 if use_nn:
-    model = CNN.NeuralNetwork()
+    model = CNN.NeuralNetwork().to('cpu')
     #load weights
-    model.load_state_dict(torch.load('model_weights.pth'))
+    model.load_state_dict(torch.load('model_weights.pth', map_location=torch.device('cpu')))
 
 
 def board_to_inference(entry_board, color):
@@ -30,12 +30,11 @@ def board_to_inference(entry_board, color):
     board_black_list = []
     board_white_list = []
     board = Goban.Board()
-    err = False
 
     if len(entry_board._historyMoveNames) < 8:
-        for i in range(9 - len(entry_board._historyMoveNames)):
-            board_black_list.append(np.zeros(board._BOARDSIZE ** 2))
-            board_white_list.append(np.zeros(board._BOARDSIZE ** 2))
+        for i in range(8 - len(entry_board._historyMoveNames)):
+            board_black_list.append(np.zeros(board._BOARDSIZE ** 2, dtype=np.int8))
+            board_white_list.append(np.zeros(board._BOARDSIZE ** 2, dtype=np.int8))
 
     for m in entry_board._historyMoveNames:
         if m == 'PASS':
@@ -43,11 +42,7 @@ def board_to_inference(entry_board, color):
         else:
             (x,y) = CNN.name_to_coord(m)
             move = y * board._BOARDSIZE + x
-        try:
-            board.push(move)
-        except:
-            err = True
-            break
+        board.push(move)
 
         board_black = board._board.copy()
         board_white = board._board.copy()
@@ -62,11 +57,11 @@ def board_to_inference(entry_board, color):
         board_white_list.append(np.array(board_white))
     hist_black = board_black_list[-8:]
     hist_white = board_black_list[-8:]
-    hist = [np.array(hist_black), np.array(hist_white)]
+    hist = [np.array([hist_black[i], hist_white[i]]) for i in range(8)]
     if(color == entry_board._BLACK):
-        hist.append(np.array([np.ones(board._BOARDSIZE ** 2, dtype=np.uint8), np.ones(board._BOARDSIZE ** 2, dtype=np.uint8)])) #BLACK to 1
+        hist.append(np.array([np.ones(board._BOARDSIZE ** 2, dtype=np.int8), np.ones(board._BOARDSIZE ** 2, dtype=np.int8)])) #BLACK to 1
     else:
-        hist.append(np.array([np.zeros(board._BOARDSIZE ** 2, dtype=np.uint8), np.zeros(board._BOARDSIZE ** 2, dtype=np.uint8)])) #WHITE to 0
+        hist.append(np.array([np.zeros(board._BOARDSIZE ** 2, dtype=np.int8), np.zeros(board._BOARDSIZE ** 2, dtype=np.int8)])) #WHITE to 0
     hist = np.array(hist)
     return torch.reshape(torch.from_numpy(hist), (1,9,2,81)).type(torch.float32)
 
@@ -284,6 +279,7 @@ class myPlayer(PlayerInterface):
     def __init__(self):
         self._board = Goban.Board()
         self._mycolor = None
+        self._mcts = MCTS(self._board, Goban.Board._BLACK)
 
     def getPlayerName(self):
         return "Aymeric-Remi"
