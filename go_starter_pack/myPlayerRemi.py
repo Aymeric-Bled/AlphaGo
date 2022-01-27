@@ -279,7 +279,6 @@ class myPlayer(PlayerInterface):
     def __init__(self):
         self._board = Goban.Board()
         self._mycolor = None
-        self._mcts = MCTS(self._board, Goban.Board._BLACK)
 
     def getPlayerName(self):
         return "Aymeric-Remi"
