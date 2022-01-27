@@ -15,9 +15,61 @@ import torch
 
 C_PUCT = 1 # facteur d'exploration
 
-model = CNN.NeuralNetwork()
-#load weights
-model.load_state_dict(torch.load('weights/model'))
+
+use_nn = True # Set it to False to use only MCTS
+if use_nn:
+    model = CNN.NeuralNetwork()
+    #load weights
+    model.load_state_dict(torch.load('model_weights.pth'))
+
+
+def board_to_inference(entry_board, color):
+    '''
+    format board to be used in model inference
+    '''
+    board_black_list = []
+    board_white_list = []
+    board = Goban.Board()
+    err = False
+
+    if len(entry_board._historyMoveNames) < 8:
+        for i in range(9 - len(entry_board._historyMoveNames)):
+            board_black_list.append(np.zeros(board._BOARDSIZE ** 2))
+            board_white_list.append(np.zeros(board._BOARDSIZE ** 2))
+
+    for m in entry_board._historyMoveNames:
+        if m == 'PASS':
+            move = -1
+        else:
+            (x,y) = CNN.name_to_coord(m)
+            move = y * board._BOARDSIZE + x
+        try:
+            board.push(move)
+        except:
+            err = True
+            break
+
+        board_black = board._board.copy()
+        board_white = board._board.copy()
+        for i in range(board._BOARDSIZE ** 2):
+            if board_black[i] == 2:
+                board_black[i] = 0
+            if board_white[i] == 1:
+                board_white[i] = 0
+            if board_white[i] == 2:
+                board_white[i] = 1 
+        board_black_list.append(np.array(board_black))
+        board_white_list.append(np.array(board_white))
+    hist_black = board_black_list[-8:]
+    hist_white = board_black_list[-8:]
+    hist = [np.array(hist_black), np.array(hist_white)]
+    if(color == entry_board._BLACK):
+        hist.append(np.array([np.ones(board._BOARDSIZE ** 2, dtype=np.uint8), np.ones(board._BOARDSIZE ** 2, dtype=np.uint8)])) #BLACK to 1
+    else:
+        hist.append(np.array([np.zeros(board._BOARDSIZE ** 2, dtype=np.uint8), np.zeros(board._BOARDSIZE ** 2, dtype=np.uint8)])) #WHITE to 0
+    hist = np.array(hist)
+    return torch.reshape(torch.from_numpy(hist), (1,9,2,81)).type(torch.float32)
+
 
 class Node:
     def __init__(self, color, parent=None, move=None):
@@ -164,7 +216,7 @@ class MCTS:
             # p is attached to the new feasible actions from the leaf node
             
             # construire entrée réseau à partir de node et ses parents...
-            x = 
+            x = board_to_inference(self.board, node.color)
             p, v = model.forward(x)
 
             children = self.expand(node)
@@ -246,7 +298,11 @@ class myPlayer(PlayerInterface):
 
         ### Version 2 (MCTS)
         # update mcts root and state (based on opponent move)
-        self._mcts.process(5)
+        seconds = 5
+        if use_nn:
+            self._mcts.process_nn(seconds)
+        else:
+            self._mcts.process(seconds)
         move = self._mcts.moveToPlay()
         self._mcts.updateTree(move)
         self._board.push(move)

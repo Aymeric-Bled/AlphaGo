@@ -21,66 +21,58 @@ def get_raw_data_go():
         data = json.loads(fz.read().decode("utf-8"))
     return data
 
+class ConvolutionBlock(nn.Module):
+    def __init__(self):
+        super(ConvolutionBlock, self).__init__()
+        self.conv = nn.Conv2d(9, 9,kernel_size=5, padding=2)
+        self.bn = nn.BatchNorm2d(9)
+        self.relu = nn.ReLU()
+    
+    def forward(self, x):
+        conv = self.conv(x)
+        conv += x
+        x1 = self.bn(conv)
+        return self.relu(x1)
+
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super(NeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(9, 9,kernel_size=5, padding='same')
-        self.conv2 = nn.Conv2d(9, 9,kernel_size=5, padding='same')
-        self.conv3 = nn.Conv2d(9, 9,kernel_size=5, padding='same')
-        self.conv4 = nn.Conv2d(9, 9,kernel_size=5, padding='same')
-        self.conv5 = nn.Conv2d(9, 9,kernel_size=5, padding='same')
-        self.bn1 = nn.BatchNorm2d(9)
-        self.bn2 = nn.BatchNorm2d(9)
-        self.bn3 = nn.BatchNorm2d(9)
-        self.bn4 = nn.BatchNorm2d(9)
-        self.bn5 = nn.BatchNorm2d(9)
-        self.linear1 = nn.Linear(9 * 81, 82)
-        self.linear2 = nn.Linear(9 * 81, 1)
-        self.relu = nn.ReLU()
+        self.res1 = ConvolutionBlock()
+        self.res2 = ConvolutionBlock()
+        self.res3 = ConvolutionBlock()
+        self.res4 = ConvolutionBlock()
+        self.res5 = ConvolutionBlock()
+        self.linear1 = nn.Linear(9 * 81 * 2, 82)
+        self.linear2 = nn.Linear(9 * 81 * 2, 1)
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(0)
-        self.dropout = nn.Dropout(0.25)
+        self.dropout1 = nn.Dropout(0.25)
+        self.dropout2 = nn.Dropout(0.25)
 
     def forward(self, x):
-        conv = self.relu(self.conv1(x))
-        x += conv
-        x = self.bn1(x)
-        
-        conv = self.relu(self.conv2(x))
-        x += conv
-        x = self.bn2(x)
-        
-        conv = self.relu(self.conv3(x))
-        x += conv
-        x = self.bn3(x)
-
-        conv = self.relu(self.conv4(x))
-        x += conv
-        x = self.bn4(x)
-        
-        conv = self.relu(self.conv5(x))
-        x += conv
-        x = self.bn5(x)
-
+        x = self.res1(x)
+        x = self.res2(x)
+        x = self.res3(x)
+        x = self.res4(x)
+        x = self.res5(x)
         x = torch.flatten(x)
-        p = self.softmax(self.dropout(self.linear1(x)))
-        v = self.sigmoid(self.dropout(self.linear2(x)))
+        p = self.softmax(self.dropout1(self.linear1(x.clone())))
+        v = self.sigmoid(self.dropout2(self.linear2(x.clone())))
         
         return (p,v)
 
 
+#model = NeuralNetwork()
 
-model = NeuralNetwork()
+#print(model)
+#x = torch.zeros((1,9,81,1))
+#result = model(x)
 
-print(model)
-x = torch.zeros((1,9,81,1))
-result = model(x)
+#print(result)
 
-print(result)
+#data = get_raw_data_go()
 
-data = get_raw_data_go()
-
-print(len(data))
+#print(len(data))
 
 def name_to_coord(s):
     assert s != "PASS"
