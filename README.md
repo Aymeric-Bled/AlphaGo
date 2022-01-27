@@ -1,6 +1,7 @@
 # Projet AlphaGo
 
 Nous avons implémenté MCTS et le réseau de neurones pour le RL.
+
 L'entraînement du réseau s'est fait par CNN_notebook.ipynb sur colab.
 
 Nous avons 2 joueurs :
@@ -13,4 +14,5 @@ Pour lancer une partie :
 
 
 Aymeric BLED
+
 Rémi BARBOSA
