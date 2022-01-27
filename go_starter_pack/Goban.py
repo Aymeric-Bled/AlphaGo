@@ -44,7 +44,7 @@ class Board:
     _BLACK = 1
     _WHITE = 2
     _EMPTY = 0
-    _BOARDSIZE = 6  # Used in static methods, do not write it
+    _BOARDSIZE = 9 # Used in static methods, do not write it
     _DEBUG = False
     __indexLetters = {'A': 0, 'B': 1, 'C': 2, 'D': 3,
                       'E': 4, 'F': 5, 'G': 6, 'H': 7, 'J': 8}

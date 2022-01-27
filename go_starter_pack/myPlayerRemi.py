@@ -10,8 +10,14 @@ import matplotlib.pyplot as plt
 import random
 import math
 import time
+import CNN
+import torch
 
 C_PUCT = 1 # facteur d'exploration
+
+model = CNN.NeuralNetwork()
+#load weights
+model.load_state_dict(torch.load('weights/model'))
 
 class Node:
     def __init__(self, color, parent=None, move=None):
@@ -81,7 +87,7 @@ class MCTS:
             return node.children
 
     def backup(self, node, results, rollouts_count):
-        while node is not None:
+        while node != self.root.parent: #is not None:
             #if node.depth%2 == 1:
             if node.color != self.mycolor:
                 node.w += results
@@ -125,13 +131,10 @@ class MCTS:
 
             node = self.select()
 
-            # game state of leaf node passed into neural network which ouput predictions (p:move probs, v:value of the state)
-            # p is attached to the new feasible actions from the leaf node
-
             children = self.expand(node)
 
+            # evaluate with rollouts (without neural net)
             if children is not None: # node is not terminal (game is not over)
-                # evaluate (rollouts)
                 # 1 rollout by child ; backup to root when all children got a rollout
                 result_sum = 0
                 for child in children:
@@ -150,6 +153,36 @@ class MCTS:
             else: # node is terminal (game is over)
                 result = self.rollout()
                 self.backup(node, result, 1)
+
+    def process_nn(self, seconds):
+        t_end = time.time() + seconds
+        while time.time() < t_end:
+
+            node = self.select()
+
+            # game state of leaf node passed into neural network which ouput predictions (p:move probs, v:value of the state)
+            # p is attached to the new feasible actions from the leaf node
+            
+            # construire entrée réseau à partir de node et ses parents...
+            x = 
+            p, v = model.forward(x)
+
+            children = self.expand(node)
+
+            if children is not None:
+                v_sum = 0
+                for child in children:
+                    child.p = p[child.move]
+                    if node.color == self.mycolor:
+                        child.w += v
+                    else:
+                        child.w += 1 - v
+                    child.n += 1
+                    v_sum += v
+
+                self.backup(node, v_sum, len(children))
+            else:
+                self.backup(node, v, 1)
 
     def moveToPlay(self):
         tau = 1    # temperature
@@ -180,7 +213,7 @@ class MCTS:
                 new_root = child
                 break
         self.root = new_root
-        self.root.parent = None
+        #self.root.parent = None
 
 
 ### Version 1 (simulations on first level)
