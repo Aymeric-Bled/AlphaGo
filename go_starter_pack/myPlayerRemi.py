@@ -23,7 +23,7 @@ if use_nn:
     model.load_state_dict(torch.load('model_weights.pth', map_location=torch.device('cpu')))
 
 
-def board_to_inference(entry_board, color):
+def board_to_inference(entry_board):
     '''
     format board to be used in model inference
     '''
@@ -35,30 +35,31 @@ def board_to_inference(entry_board, color):
         for i in range(8 - len(entry_board._historyMoveNames)):
             board_black_list.append(np.zeros(board._BOARDSIZE ** 2, dtype=np.int8))
             board_white_list.append(np.zeros(board._BOARDSIZE ** 2, dtype=np.int8))
-
-    for m in entry_board._historyMoveNames:
+    length = len(entry_board._historyMoveNames)
+    for index in range(length):
+        m = entry_board._historyMoveNames[index]
         if m == 'PASS':
             move = -1
         else:
             (x,y) = CNN.name_to_coord(m)
             move = y * board._BOARDSIZE + x
         board.push(move)
-
-        board_black = board._board.copy()
-        board_white = board._board.copy()
-        for i in range(board._BOARDSIZE ** 2):
-            if board_black[i] == 2:
-                board_black[i] = 0
-            if board_white[i] == 1:
-                board_white[i] = 0
-            if board_white[i] == 2:
-                board_white[i] = 1 
-        board_black_list.append(np.array(board_black))
-        board_white_list.append(np.array(board_white))
+        if length - index <= 8:
+            board_black = board._board.copy()
+            board_white = board._board.copy()
+            for i in range(board._BOARDSIZE ** 2):
+                if board_black[i] == 2:
+                    board_black[i] = 0
+                if board_white[i] == 1:
+                    board_white[i] = 0
+                if board_white[i] == 2:
+                    board_white[i] = 1 
+            board_black_list.append(np.array(board_black))
+            board_white_list.append(np.array(board_white))
     hist_black = board_black_list[-8:]
     hist_white = board_black_list[-8:]
     hist = [np.array([hist_black[i], hist_white[i]]) for i in range(8)]
-    if(color == entry_board._BLACK):
+    if(length % 2 == 0):
         hist.append(np.array([np.ones(board._BOARDSIZE ** 2, dtype=np.int8), np.ones(board._BOARDSIZE ** 2, dtype=np.int8)])) #BLACK to 1
     else:
         hist.append(np.array([np.zeros(board._BOARDSIZE ** 2, dtype=np.int8), np.zeros(board._BOARDSIZE ** 2, dtype=np.int8)])) #WHITE to 0
@@ -90,13 +91,15 @@ class Node:
 
     def getBestChild(self): # select best child (action that maximizes Q+U)
         max_value = -1
-        best_child = None
+        best_children = []
         for child in self.children:
             child_value = child.q() + child.u()
             if child_value > max_value:
                 max_value = child_value
-                best_child = child
-        return best_child
+                best_children = [child]
+            elif child_value == max_value:
+                best_children.append(child)
+        return random.choice(best_children)
 
 
 class MCTS:
@@ -211,8 +214,10 @@ class MCTS:
             # p is attached to the new feasible actions from the leaf node
             
             # construire entrée réseau à partir de node et ses parents...
-            x = board_to_inference(self.board, node.color)
+            x = board_to_inference(self.board)
             p, v = model.forward(x)
+            if node.color == self.board._BLACK:
+                v = 1 - v
 
             children = self.expand(node)
 
@@ -224,7 +229,6 @@ class MCTS:
                         child.w += v
                     else:
                         child.w += 1 - v
-                    child.n += 1
                     v_sum += v
 
                 self.backup(node, v_sum, len(children))
@@ -236,17 +240,15 @@ class MCTS:
         if self.board._nbBLACK + self.board._nbWHITE >= self.board._BOARDSIZE:
             tau = 0.1
 
-        n_sum = 0
-        n_list = []
-        for child in self.root.children:
-            n_list.append(child.n)
-            n_sum += child.n**(1/tau)
+        length = len(self.root.children)
+        n_list = np.zeros(length)
+        for i in range(length):
+            n_list[i] = self.root.children[i].n ** (1 /tau)
 
-        for i, n in enumerate(n_list):
-            n_list[i] = n**(1/tau)/(n_sum)
+        n_list /= np.sum(n_list)
         
         # pick move from distribution
-        child_index = np.random.choice(range(len(n_list)), p=n_list)
+        child_index = np.random.choice(range(length), p=n_list)
         return self.root.children[child_index].move
 
     def updateTree(self, move):
@@ -289,7 +291,7 @@ class myPlayer(PlayerInterface):
             return "PASS"
 
         # Get the list of all possible moves
-        moves = self._board.legal_moves() # Dont use weak_legal_moves() here!
+        #moves = self._board.legal_moves() # Dont use weak_legal_moves() here!
 
         ### Version 2 (MCTS)
         # update mcts root and state (based on opponent move)

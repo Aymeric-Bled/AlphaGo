@@ -116,20 +116,19 @@ class MCTS:
     '''
 
     def chooseBestMove(self, board):
-        tau = 1
-        if len(board._empties) * 10 < 9 * board._BOARDSIZE ** 2:
-            tau = 0.01
-        n_sum = 0
-        n_list = []
-        for child in self._root.children:
-            n_list.append(child.n)
-            n_sum += child.n ** (1 / tau)
-        
-        for i, n in enumerate(n_list):
-            n_list[i] = n**(1/tau)/n_sum # * alpha ?
+        tau = 1    # temperature
+        if board._nbBLACK + board._nbWHITE >= board._BOARDSIZE:
+            tau = 0.1
+
+        length = len(self._root.children)
+        n_list = np.zeros(length)
+        for i in range(length):
+            n_list[i] = self._root.children[i].n ** (1 /tau)
+
+        n_list /= np.sum(n_list)
         
         # pick move from distribution
-        child_index = np.random.choice(range(len(n_list)), p=n_list)
+        child_index = np.random.choice(range(length), p=n_list)
         return self._root.children[child_index].move
 
 
